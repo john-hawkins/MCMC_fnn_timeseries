@@ -94,7 +94,7 @@ class Network:
         Desired = np.zeros((1, self.Top[2]))
         fx = np.zeros(size)
 
-        for pat in xrange(0, size):
+        for pat in range(0, size):
             Input[:] = data[pat, 0:self.Top[0]]
             Desired[:] = data[pat, self.Top[0]:]
 
@@ -148,8 +148,8 @@ class MCMC:
         netw = self.topology  # [input, hidden, output]
         y_test = self.testdata[:, netw[0]]
         y_train = self.traindata[:, netw[0]]
-        print y_train.size
-        print y_test.size
+        print(y_train.size)
+        print(y_test.size)
 
         w_size = (netw[0] * netw[1]) + (netw[1] * netw[2]) + netw[1] + netw[2]  # num of weights and bias
 
@@ -169,7 +169,7 @@ class MCMC:
         # --------------------- Declare FNN and initialize
 
         neuralnet = Network(self.topology, self.traindata, self.testdata)
-        print 'evaluate Initial w'
+        print('evaluate Initial w')
 
         pred_train = neuralnet.evaluate_proposal(self.traindata, w)
         pred_test = neuralnet.evaluate_proposal(self.testdata, w)
@@ -186,10 +186,10 @@ class MCMC:
         [likelihood, pred_train, rmsetrain] = self.likelihood_func(neuralnet, self.traindata, w, tau_pro)
         [likelihood_ignore, pred_test, rmsetest] = self.likelihood_func(neuralnet, self.testdata, w, tau_pro)
 
-        print likelihood
+        print('Likelihood: ', likelihood)
 
         naccept = 0
-        print 'begin sampling using mcmc random walk'
+        print('begin sampling using mcmc random walk')
         plt.plot(x_train, y_train)
         plt.plot(x_train, pred_train)
         plt.title("Plot of Data vs Initial Fx")
@@ -224,14 +224,14 @@ class MCMC:
 
             if u < mh_prob:
                 # Update position
-                print    i, ' is accepted sample'
+                print ( i, ' is accepted sample')
                 naccept += 1
                 likelihood = likelihood_proposal
                 prior_likelihood = prior_prop
                 w = w_proposal
                 eta = eta_pro
 
-                print  likelihood, prior_likelihood, rmsetrain, rmsetest, w, 'accepted'
+                print ( likelihood, prior_likelihood, rmsetrain, rmsetest, w, 'accepted')
 
                 pos_w[i + 1,] = w_proposal
                 pos_tau[i + 1,] = tau_pro
@@ -251,10 +251,10 @@ class MCMC:
                 rmse_train[i + 1,] = rmse_train[i,]
                 rmse_test[i + 1,] = rmse_test[i,]
 
-                # print i, 'rejected and retained'
+                # print ( i, 'rejected and retained')
 
-        print naccept, ' num accepted'
-        print naccept / (samples * 1.0), '% was accepted'
+        print (naccept, ' num accepted')
+        print (naccept / (samples * 1.0), '% was accepted')
         accept_ratio = naccept / (samples * 1.0) * 100
 
         plt.title("Plot of Accepted Proposals")
@@ -267,7 +267,7 @@ class MCMC:
 
 def main():
     outres = open('mcmcresults/resultspriors.txt', 'w')
-    for problem in xrange(2, 3): 
+    for problem in range(2, 3): 
 
         hidden = 5
         input = 4  #
@@ -296,7 +296,7 @@ def main():
         mcmc = MCMC(numSamples, traindata, testdata, topology)  # declare class
 
         [pos_w, pos_tau, fx_train, fx_test, x_train, x_test, rmse_train, rmse_test, accept_ratio] = mcmc.sampler()
-        print 'sucessfully sampled'
+        print('sucessfully sampled')
 
         burnin = 0.1 * numSamples  # use post burn in samples
 
@@ -315,7 +315,7 @@ def main():
         rmsetr_std = np.std(rmse_train[int(burnin):])
         rmse_tes = np.mean(rmse_test[int(burnin):])
         rmsetest_std = np.std(rmse_test[int(burnin):])
-        print rmse_tr, rmsetr_std, rmse_tes, rmsetest_std
+        print (rmse_tr, rmsetr_std, rmse_tes, rmsetest_std)
         np.savetxt(outres, (rmse_tr, rmsetr_std, rmse_tes, rmsetest_std, accept_ratio), fmt='%1.5f')
 
         ytestdata = testdata[:, input]
