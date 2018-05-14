@@ -138,52 +138,110 @@ class MCMC:
     def sampler(self):
 
         # ------------------- initialize MCMC
+
+	# How may training and test points? 
+	# shape[0] Returns the first dimension of the data arraay
+	# In this instance it is the number of discrete (y,x) combinations in the data set
         testsize = self.testdata.shape[0]
         trainsize = self.traindata.shape[0]
+
+	# Samples is the number of samples we are going to take in the run of MCMC
         samples = self.samples
 
+	# We initialise a vector with values from uniform distribution, one value per training and test point
+	# NOT SURE WHY WE DO THIS
         x_test = np.linspace(0, 1, num=testsize)
         x_train = np.linspace(0, 1, num=trainsize)
 
-        netw = self.topology  # [input, hidden, output]
+	# The topology of the neural network # [input, hidden, output]
+        netw = self.topology
+
+	# Copy the y values into an independent vector
         y_test = self.testdata[:, netw[0]]
         y_train = self.traindata[:, netw[0]]
         print(y_train.size)
         print(y_test.size)
 
+	# The total number of parameters for the neural network
         w_size = (netw[0] * netw[1]) + (netw[1] * netw[2]) + netw[1] + netw[2]  # num of weights and bias
 
-        pos_w = np.ones((samples, w_size))  # posterior of all weights and bias over all samples
+	# WHAT IS THIS FOR?
+	# posterior of all weights and bias over all samples
+	# WHY IS THE SECOND DIMENSION w_size?
+	# SHOULDN"T THE POSTERIOR BE A SINGLE VALUE PER SAMPLE?
+        pos_w = np.ones((samples, w_size))  
+
+	# TAU IS THE STANDARD DEVIATION OF THE ERROR IN THE DATA GENERATING FUNCTIONS
+	# I.E. WE ASSUME THAT THE MODEL WILL BE TRYING TO LEARN SOME FUNCTION F(X)
+	# AND THAT THE OBSERVED VALUES Y = F(X) + E
+	# I PRESUME WE INITIALISE THIS SO WE CAN STORE THE VALUES OF TAU ACROSS THE SIMULATION?
         pos_tau = np.ones((samples, 1))
 
+
+	# F(X) BUFFER - ALL NETWORK OUTPUTS WILL BE STORED HERE
         fxtrain_samples = np.ones((samples, trainsize))  # fx of train data over all samples
         fxtest_samples = np.ones((samples, testsize))  # fx of test data over all samples
+
+	# STORE RMSE FOR EVERY STEP AS THE MCMC PROGRESSES
         rmse_train = np.zeros(samples)
         rmse_test = np.zeros(samples)
 
+	# WE INITIALISE THE WEIGHTS RANDOMLY  
         w = np.random.randn(w_size)
         w_proposal = np.random.randn(w_size)
 
-        step_w = 0.02;  # defines how much variation you need in changes to w
+	# THESE PARAMETERS CONTROL THE RANDOM WORK
+	# THE FIRST THE CHANGES TO THE NETWORK WEIGHTS
+        step_w = 0.02;  
+	# THE SECOND THE VARIATION IN THE NOISE DISTRIBUTION
         step_eta = 0.01;
+
+	# #################################################################
         # --------------------- Declare FNN and initialize
 
         neuralnet = Network(self.topology, self.traindata, self.testdata)
         print('evaluate Initial w')
 
+	# PASS THE DATA THROUGH THE NETWORK AND GET THE OUTPUTS ON BOTH TRAIN AND TEST
         pred_train = neuralnet.evaluate_proposal(self.traindata, w)
         pred_test = neuralnet.evaluate_proposal(self.testdata, w)
 
+	#
+	# INITIAL VALUE OF TAU IS BASED ON THE ERROR OF THE INITIAL NETWORK ON TRAINING DATA
+	# ETA - IS USED FOR DOING THE RANDOM WALK SO THAT WE CAN ADD OR SUBTRACT RANDOM VALUES
+	#       SUPPORT OVER [-INF, INF]
+	# EXPONENTIATED TO GET tau_squared of the proposal WITH SUPPORT OVER [0, INF] 
         eta = np.log(np.var(pred_train - y_train))
         tau_pro = np.exp(eta)
 
-        sigma_squared = 25
+	# 
+	# THESE VALUES CONTROL THE INVERSE GAMMA FUNCTION
+	# WHICH IS WHAT WE ASSUME TAU SQUARED IS DRAWN FROM
+	# THIS IS CHOSEN FOR PROPOERTIES THAT COMPLIMENT WITH THE GAUSSIAN LIKELIHOOD FUNCTION
+	# IS THERE A REFERENCE FOR THIS?
         nu_1 = 0
         nu_2 = 0
 
+	# SIGMA SQUARED IS THE ASSUMED VARIANCE OF THE PRIOR DISTRIBUTION OF ALL WEIGHTS AND BIASES IN THE NEURAL NETWORK
+        sigma_squared = 25
+
+	# #############################################################################################################
+	# THIS NEXT SECTION INVOLVES CALCULATING THE COMPONENTS OF THE Metropilis-Hastings Acceptance Probability
+	# This is what will determine whether a given change to the model weights (a proposal) is accepted or rejected
+	# This will consist of the following
+	# 1) A ratio of the likelihoods (current and proposal)
+	# 2) A ratio of the priors (current and proposal)
+	# 3) The inverse ratio of the transition probabilities. (Ommitted in this case because transitions are symetric)
+	# #############################################################################################################
+
+	# 
+	# PRIOR PROBABILITY OF THE WEIGHTING SCHEME W
         prior_likelihood = self.prior_likelihood(sigma_squared, nu_1, nu_2, w, tau_pro)  # takes care of the gradients
 
+	# 
+	# LIKELIHOOD OF THE DATA GIVEN THE PARAMETERS
         [likelihood, pred_train, rmsetrain] = self.likelihood_func(neuralnet, self.traindata, w, tau_pro)
+	# CALCULATED ON THE TEST SET FOR LOGGING AND OBSERVATION
         [likelihood_ignore, pred_test, rmsetest] = self.likelihood_func(neuralnet, self.testdata, w, tau_pro)
 
         print('Likelihood: ', likelihood)
