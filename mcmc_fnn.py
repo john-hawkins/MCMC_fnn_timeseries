@@ -16,8 +16,6 @@
 # University of Sydey, Sydney NSW, Australia.  2017 c.rohitash@gmail.conm
 # https://www.researchgate.net/profile/Rohitash_Chandra
 
-
-
 # Reference for publication for this code
 # [Chandra_ICONIP2017] R. Chandra, L. Azizi, S. Cripps, 'Bayesian neural learning via Langevin dynamicsfor chaotic time series prediction', ICONIP 2017.
 # (to be addeded on https://www.researchgate.net/profile/Rohitash_Chandra)
@@ -145,11 +143,17 @@ class MCMC:
         testsize = self.testdata.shape[0]
         trainsize = self.traindata.shape[0]
 
+	# HAWKINS: I am inserting some code here to include a random walk over data
+	# points. WORK-IN-PROGRESS: Not certain yet how to initialise and whether
+	# this needs to be factored into the calculate of the likelihood.
+	# A vector that indicate whether to include a given data point in the training set
+	datainclude = [random.choice([0,1]) for _ in range(trainsize)]
+
 	# Samples is the number of samples we are going to take in the run of MCMC
         samples = self.samples
 
-	# We initialise a vector with values from uniform distribution, one value per training and test point
-	# NOT SURE WHY WE DO THIS
+	# Initialise a vector with a sequence of values equal to the length of the train and test sets
+	# WE DO THIS SO WE HAVE X-INDECIES FOR PLOTTING THE DATA
         x_test = np.linspace(0, 1, num=testsize)
         x_train = np.linspace(0, 1, num=trainsize)
 
@@ -163,13 +167,15 @@ class MCMC:
         print(y_test.size)
 
 	# The total number of parameters for the neural network
-        w_size = (netw[0] * netw[1]) + (netw[1] * netw[2]) + netw[1] + netw[2]  # num of weights and bias
+	# is the number of weights and bias
+        w_size = (netw[0] * netw[1]) + (netw[1] * netw[2]) + netw[1] + netw[2]  
 
-	# WHAT IS THIS FOR?
-	# posterior of all weights and bias over all samples
-	# WHY IS THE SECOND DIMENSION w_size?
-	# SHOULDN"T THE POSTERIOR BE A SINGLE VALUE PER SAMPLE?
-        pos_w = np.ones((samples, w_size))  
+	# Posterior distribution of all weights and bias over all samples
+	# We will take 'samples' number of samples
+	# and there will be a total of 'w_size' parameters in the model.
+        # We collect this because it will hold the empirical data for our 
+	# estimate of the posterior distribution. 
+	pos_w = np.ones((samples, w_size))  
 
 	# TAU IS THE STANDARD DEVIATION OF THE ERROR IN THE DATA GENERATING FUNCTIONS
 	# I.E. WE ASSUME THAT THE MODEL WILL BE TRYING TO LEARN SOME FUNCTION F(X)
@@ -222,23 +228,25 @@ class MCMC:
         nu_1 = 0
         nu_2 = 0
 
-	# SIGMA SQUARED IS THE ASSUMED VARIANCE OF THE PRIOR DISTRIBUTION OF ALL WEIGHTS AND BIASES IN THE NEURAL NETWORK
+	# SIGMA SQUARED IS THE ASSUMED VARIANCE OF THE PRIOR DISTRIBUTION 
+	# OF ALL WEIGHTS AND BIASES IN THE NEURAL NETWORK
         sigma_squared = 25
 
-	# #############################################################################################################
-	# THIS NEXT SECTION INVOLVES CALCULATING THE COMPONENTS OF THE Metropilis-Hastings Acceptance Probability
-	# This is what will determine whether a given change to the model weights (a proposal) is accepted or rejected
+	#############################################################################################
+	# THIS NEXT SECTION INVOLVES CALCULATING THE COMPONENTS OF THE Metropilis-Hastings 
+	# Acceptance Probability
+	# This is what will determine whether a given change to the model weights (a proposal) 
+	# is accepted or rejected
 	# This will consist of the following
 	# 1) A ratio of the likelihoods (current and proposal)
 	# 2) A ratio of the priors (current and proposal)
-	# 3) The inverse ratio of the transition probabilities. (Ommitted in this case because transitions are symetric)
-	# #############################################################################################################
+	# 3) The inverse ratio of the transition probabilities. 
+	# (Ommitted in this case because transitions are symetric)
+	#############################################################################################
 
-	# 
 	# PRIOR PROBABILITY OF THE WEIGHTING SCHEME W
         prior_likelihood = self.prior_likelihood(sigma_squared, nu_1, nu_2, w, tau_pro)  # takes care of the gradients
 
-	# 
 	# LIKELIHOOD OF THE DATA GIVEN THE PARAMETERS
         [likelihood, pred_train, rmsetrain] = self.likelihood_func(neuralnet, self.traindata, w, tau_pro)
 	# CALCULATED ON THE TEST SET FOR LOGGING AND OBSERVATION
@@ -328,35 +336,37 @@ def main():
     for problem in range(2, 3): 
 
         hidden = 5
-        input = 4  #
+        input = 4
         output = 1
 
         if problem == 1:
             traindata = np.loadtxt("Data_OneStepAhead/Lazer/train.txt")
-            testdata = np.loadtxt("Data_OneStepAhead/Lazer/test.txt")  #
+            testdata = np.loadtxt("Data_OneStepAhead/Lazer/test.txt") 
         if problem == 2:
             traindata = np.loadtxt("Data_OneStepAhead/Sunspot/train.txt")
-            testdata = np.loadtxt("Data_OneStepAhead/Sunspot/test.txt")  #
+            testdata = np.loadtxt("Data_OneStepAhead/Sunspot/test.txt") 
         if problem == 3:
             traindata = np.loadtxt("Data_OneStepAhead/Mackey/train.txt")
-            testdata = np.loadtxt("Data_OneStepAhead/Mackey/test.txt")  # 
+            testdata = np.loadtxt("Data_OneStepAhead/Mackey/test.txt") 
 
         print(traindata)
 
         topology = [input, hidden, output]
 
-        MinCriteria = 0.005  # stop when RMSE reaches MinCriteria ( problem dependent)
+	# Stop when RMSE reaches MinCriteria (Problem dependent)
+        MinCriteria = 0.005  
 
-        random.seed(time.time())
+        random.seed( time.time() )
 
-        numSamples = 80000  # need to decide yourself
+	# Need to decide yourself
+        numSamples = 80000  
 
         mcmc = MCMC(numSamples, traindata, testdata, topology)  # declare class
 
         [pos_w, pos_tau, fx_train, fx_test, x_train, x_test, rmse_train, rmse_test, accept_ratio] = mcmc.sampler()
-        print('sucessfully sampled')
+        print('Sucessfully Sampled')
 
-        burnin = 0.1 * numSamples  # use post burn in samples
+        burnin = 0.1 * numSamples  # Use post burn in samples
 
         pos_w = pos_w[int(burnin):, ]
         pos_tau = pos_tau[int(burnin):, ]
@@ -411,7 +421,7 @@ def main():
         ax.set_xlabel('[W1] [B1] [W2] [B2]')
         ax.set_ylabel('Posterior')
 
-        plt.legend(loc='upper right')
+        #plt.legend(loc='upper right')
 
         plt.title("Boxplot of Posterior W (weights and biases)")
         plt.savefig('mcmcresults/w_pos.png')
