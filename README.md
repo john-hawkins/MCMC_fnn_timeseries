@@ -4,12 +4,16 @@
 
 Bayesian MCMC Feedforward Neural Network for Time Series Prediction
 
-Changes
+### Changes
 * Making Python 3 Compatible
-* Commenting the MCMC code to be sure all steps are clear
+* Commenting the MCMC code to improve comprehension for newbies
+
+### Experiments
+
+* Added a random walk over the samples in the traingdata. This allows us to explore the posterior
+distribution over training data importance.
 
 TODO
 * Separate Neural Network and make MCMC code re-usable with alternative networks
-* Include network structure and data sampling in the MCMC simulation
-
+* Include network structure and input window size in the MCMC simulation
 

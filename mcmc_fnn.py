@@ -1,28 +1,9 @@
 # !/usr/bin/python
 
-
 # MCMC Random Walk for Feedforward Neural Network for One-Step-Ahead Chaotic Time Series Prediction
-
-# Data (Sunspot and Lazer). Taken' Theorem used for Data Reconstruction (Dimension = 4, Timelag = 2).
-# Data procesing file is included.
-
-# RMSE (Root Mean Squared Error)
 
 # based on: https://github.com/rohitash-chandra/FNN_TimeSeries
 # based on: https://github.com/rohitash-chandra/mcmc-randomwalk
-
-
-# Rohitash Chandra, Centre for Translational Data Science
-# University of Sydey, Sydney NSW, Australia.  2017 c.rohitash@gmail.conm
-# https://www.researchgate.net/profile/Rohitash_Chandra
-
-# Reference for publication for this code
-# [Chandra_ICONIP2017] R. Chandra, L. Azizi, S. Cripps, 'Bayesian neural learning via Langevin dynamicsfor chaotic time series prediction', ICONIP 2017.
-# (to be addeded on https://www.researchgate.net/profile/Rohitash_Chandra)
-
-
-
-
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -30,8 +11,9 @@ import random
 import time
 import math
 
-
-# An example of a class
+######################################################
+# DEFINE A NEURAL NETWORK CLASS
+######################################################
 class Network:
     def __init__(self, Topo, Train, Test):
         self.Top = Topo  # NN topology [input, hidden, output]
@@ -102,11 +84,9 @@ class Network:
         return fx
 
 
-# --------------------------------------------------------------------------
-
-# -------------------------------------------------------------------
-
-
+#-------------------------------------------------------------------------------
+# DEFINE A MARKOV CHAIN MONTE CARLO CLASS - FOR THE NEURAL NETWORK
+#-------------------------------------------------------------------------------
 class MCMC:
     def __init__(self, samples, traindata, testdata, topology):
         self.samples = samples  # NN topology [input, hidden, output]
@@ -118,71 +98,89 @@ class MCMC:
     def rmse(self, predictions, targets):
         return np.sqrt(((predictions - targets) ** 2).mean())
 
-    def likelihood_func(self, neuralnet, data, w, tausq):
+    def reduceData(self, data, incl):
+        fltre = incl>0
+        return data[fltre]
+
+    def modifyIncludedData(self, incl):
+        newincl = incl.copy()
+        pos = random.choice(list(range(0, len(incl))))
+        if newincl[pos]==0: 
+           newincl[pos]=1
+        else: 
+           newincl[pos]=0
+        return newincl
+
+    def log_likelihood(self, neuralnet, data, w, tausq):
         y = data[:, self.topology[0]]
         fx = neuralnet.evaluate_proposal(data, w)
         rmse = self.rmse(fx, y)
         loss = -0.5 * np.log(2 * math.pi * tausq) - 0.5 * np.square(y - fx) / tausq
         return [np.sum(loss), fx, rmse]
 
-    def prior_likelihood(self, sigma_squared, nu_1, nu_2, w, tausq):
+    def log_prior(self, sigma_squared, nu_1, nu_2, w, tausq):
         h = self.topology[1]  # number hidden neurons
         d = self.topology[0]  # number input neurons
         part1 = -1 * ((d * h + h + 2) / 2) * np.log(sigma_squared)
         part2 = 1 / (2 * sigma_squared) * (sum(np.square(w)))
-        log_loss = part1 - part2 - (1 + nu_1) * np.log(tausq) - (nu_2 / tausq)
-        return log_loss
+        logp = part1 - part2 - (1 + nu_1) * np.log(tausq) - (nu_2 / tausq)
+        return logp
+
 
     def sampler(self):
 
         # ------------------- initialize MCMC
 
-	# How may training and test points? 
-	# shape[0] Returns the first dimension of the data arraay
-	# In this instance it is the number of discrete (y,x) combinations in the data set
+        # How may training and test points? 
+        # shape[0] Returns the first dimension of the array
+        # In this instance it is the number of discrete (x,y) combinations in the data set
         testsize = self.testdata.shape[0]
         trainsize = self.traindata.shape[0]
 
-	# HAWKINS: I am inserting some code here to include a random walk over data
-	# points. WORK-IN-PROGRESS: Not certain yet how to initialise and whether
-	# this needs to be factored into the calculate of the likelihood.
-	# A vector that indicate whether to include a given data point in the training set
-	datainclude = [random.choice([0,1]) for _ in range(trainsize)]
-
-	# Samples is the number of samples we are going to take in the run of MCMC
+        # Samples is the number of samples we are going to take in the run of MCMC
         samples = self.samples
 
-	# Initialise a vector with a sequence of values equal to the length of the train and test sets
-	# WE DO THIS SO WE HAVE X-INDECIES FOR PLOTTING THE DATA
+        # HAWKINS: I am inserting some code here to include a random walk over data points. 
+        # WORK-IN-PROGRESS: Not certain yet how to initialise and whether
+        # this needs to be factored into the calculate of the likelihood.
+
+        # A vector that indicate whether to include a given data point in the training set
+        incl = np.ones(trainsize)
+        # incl =  np.array([random.choice([0,1]) for _ in range(trainsize)])
+
+        # History of that vector - This will form the posterior over DATA INCLUSION
+        pos_incl = np.ones((samples, trainsize))
+
+        # Initialise a vector with a sequence of values equal to the length of the train and test sets
+        # We only do this for plotting - these are the x-coordinates for the plot data
         x_test = np.linspace(0, 1, num=testsize)
         x_train = np.linspace(0, 1, num=trainsize)
 
-	# The topology of the neural network # [input, hidden, output]
+        # The topology of the neural network # [input, hidden, output]
         netw = self.topology
 
-	# Copy the y values into an independent vector
+        # Copy the y values into an independent vector
         y_test = self.testdata[:, netw[0]]
         y_train = self.traindata[:, netw[0]]
         print(y_train.size)
         print(y_test.size)
 
-	# The total number of parameters for the neural network
-	# is the number of weights and bias
+        # The total number of parameters for the neural network
+        # is the number of weights and bias
         w_size = (netw[0] * netw[1]) + (netw[1] * netw[2]) + netw[1] + netw[2]  
 
 	# Posterior distribution of all weights and bias over all samples
 	# We will take 'samples' number of samples
 	# and there will be a total of 'w_size' parameters in the model.
         # We collect this because it will hold the empirical data for our 
-	# estimate of the posterior distribution. 
-	pos_w = np.ones((samples, w_size))  
+        # estimate of the posterior distribution. 
+        pos_w = np.ones((samples, w_size))
 
-	# TAU IS THE STANDARD DEVIATION OF THE ERROR IN THE DATA GENERATING FUNCTIONS
-	# I.E. WE ASSUME THAT THE MODEL WILL BE TRYING TO LEARN SOME FUNCTION F(X)
+        # TAU IS THE STANDARD DEVIATION OF THE ERROR IN THE DATA GENERATING FUNCTIONS
+        # I.E. WE ASSUME THAT THE MODEL WILL BE TRYING TO LEARN SOME FUNCTION F(X)
 	# AND THAT THE OBSERVED VALUES Y = F(X) + E
-	# I PRESUME WE INITIALISE THIS SO WE CAN STORE THE VALUES OF TAU ACROSS THE SIMULATION?
+        # THIS STORES THE POSTERIOR DISTRIBUTION ACROSS THESE WEIGHTS AS GENERATED BY THE MCMC PROCESS 
         pos_tau = np.ones((samples, 1))
-
 
 	# F(X) BUFFER - ALL NETWORK OUTPUTS WILL BE STORED HERE
         fxtrain_samples = np.ones((samples, trainsize))  # fx of train data over all samples
@@ -202,7 +200,7 @@ class MCMC:
 	# THE SECOND THE VARIATION IN THE NOISE DISTRIBUTION
         step_eta = 0.01;
 
-	# #################################################################
+	#-------------------------------------------------------------------------------
         # --------------------- Declare FNN and initialize
 
         neuralnet = Network(self.topology, self.traindata, self.testdata)
@@ -232,9 +230,8 @@ class MCMC:
 	# OF ALL WEIGHTS AND BIASES IN THE NEURAL NETWORK
         sigma_squared = 25
 
-	#############################################################################################
-	# THIS NEXT SECTION INVOLVES CALCULATING THE COMPONENTS OF THE Metropilis-Hastings 
-	# Acceptance Probability
+	#----------------------------------------------------------------------------------------
+	# THIS NEXT SECTION INVOLVES CALCULATING: Metropolis-Hastings Acceptance Probability
 	# This is what will determine whether a given change to the model weights (a proposal) 
 	# is accepted or rejected
 	# This will consist of the following
@@ -242,15 +239,16 @@ class MCMC:
 	# 2) A ratio of the priors (current and proposal)
 	# 3) The inverse ratio of the transition probabilities. 
 	# (Ommitted in this case because transitions are symetric)
-	#############################################################################################
+	#----------------------------------------------------------------------------------------
 
 	# PRIOR PROBABILITY OF THE WEIGHTING SCHEME W
-        prior_likelihood = self.prior_likelihood(sigma_squared, nu_1, nu_2, w, tau_pro)  # takes care of the gradients
+        prior_current = self.log_prior(sigma_squared, nu_1, nu_2, w, tau_pro)
 
-	# LIKELIHOOD OF THE DATA GIVEN THE PARAMETERS
-        [likelihood, pred_train, rmsetrain] = self.likelihood_func(neuralnet, self.traindata, w, tau_pro)
-	# CALCULATED ON THE TEST SET FOR LOGGING AND OBSERVATION
-        [likelihood_ignore, pred_test, rmsetest] = self.likelihood_func(neuralnet, self.testdata, w, tau_pro)
+        # LIKELIHOOD OF THE TRAINING DATA GIVEN THE PARAMETERS
+        [likelihood, pred_train, rmsetrain] = self.log_likelihood(neuralnet, self.traindata, w, tau_pro)
+
+        # CALCULATED ON THE TEST SET FOR LOGGING AND OBSERVATION
+        [likelihood_ignore, pred_test, rmsetest] = self.log_likelihood(neuralnet, self.testdata, w, tau_pro)
 
         print('Likelihood: ', likelihood)
 
@@ -271,36 +269,40 @@ class MCMC:
             eta_pro = eta + np.random.normal(0, step_eta, 1)
             tau_pro = math.exp(eta_pro)
 
-            [likelihood_proposal, pred_train, rmsetrain] = self.likelihood_func(neuralnet, self.traindata, w_proposal,
-                                                                                tau_pro)
-            [likelihood_ignore, pred_test, rmsetest] = self.likelihood_func(neuralnet, self.testdata, w_proposal,
-                                                                            tau_pro)
+            incl_pro = self.modifyIncludedData(incl)
+            dataThisRound = self.reduceData(self.traindata, incl_pro)
 
-            # likelihood_ignore  refers to parameter that will not be used in the alg.
+            # WE RUN THIS TWICE SO WE HAVE PERFORMANCE OF THE WHOLE TRAINING SET FOR LOGGING
+            [likelihood_proposal, preds, rmse] = self.log_likelihood(neuralnet, dataThisRound, w_proposal, tau_pro)
+            [likelihood_train, pred_train, rmsetrain] = self.log_likelihood(neuralnet, self.traindata, w_proposal, tau_pro)
+            [l_ignore, pred_test, rmsetest] = self.log_likelihood(neuralnet, self.testdata, w_proposal, tau_pro)
 
-            prior_prop = self.prior_likelihood(sigma_squared, nu_1, nu_2, w_proposal,
-                                               tau_pro)  # takes care of the gradients
+            # l_ignore  refers to parameter that will not be used in the alg.
+            prior_prop = self.log_prior(sigma_squared, nu_1, nu_2, w_proposal, tau_pro)
 
             diff_likelihood = likelihood_proposal - likelihood
-            diff_priorliklihood = prior_prop - prior_likelihood
+            diff_prior = prior_prop - prior_current
 
-            mh_prob = min(1, math.exp(diff_likelihood + diff_priorliklihood))
+            mh_prob = min(1, math.exp(diff_likelihood + diff_prior))
 
             u = random.uniform(0, 1)
 
             if u < mh_prob:
                 # Update position
                 print ( i, ' is accepted sample')
+                print ( round(incl.mean()*100,1), '% of data included' ) 
                 naccept += 1
                 likelihood = likelihood_proposal
-                prior_likelihood = prior_prop
+                prior_current = prior_prop
                 w = w_proposal
                 eta = eta_pro
+                incl = incl_pro
 
-                print ( likelihood, prior_likelihood, rmsetrain, rmsetest, w, 'accepted')
+                print ( likelihood, prior_current, rmsetrain, rmsetest, w, 'accepted')
 
                 pos_w[i + 1,] = w_proposal
                 pos_tau[i + 1,] = tau_pro
+                pos_incl[i + 1,] = incl_pro
                 fxtrain_samples[i + 1,] = pred_train
                 fxtest_samples[i + 1,] = pred_test
                 rmse_train[i + 1,] = rmsetrain
@@ -312,6 +314,7 @@ class MCMC:
             else:
                 pos_w[i + 1,] = pos_w[i,]
                 pos_tau[i + 1,] = pos_tau[i,]
+                pos_incl[i + 1,] = pos_incl[i,]
                 fxtrain_samples[i + 1,] = fxtrain_samples[i,]
                 fxtest_samples[i + 1,] = fxtest_samples[i,]
                 rmse_train[i + 1,] = rmse_train[i,]
@@ -326,6 +329,15 @@ class MCMC:
         plt.title("Plot of Accepted Proposals")
         plt.savefig('mcmcresults/proposals.png')
         plt.savefig('mcmcresults/proposals.svg', format='svg', dpi=600)
+        plt.clf()
+
+
+        # Marginal posterior distribution of data inclusion
+        pos_incl_marginal = pos_incl.mean(axis=0) 
+        bars = plt.bar(list(range(0, len(pos_incl_marginal))), pos_incl_marginal)
+        plt.title("Plot of Accepted Proposals")
+        plt.savefig('mcmcresults/included_data_posterior.png')
+        plt.savefig('mcmcresults/included_data_posterior.svg', format='svg', dpi=600)
         plt.clf()
 
         return (pos_w, pos_tau, fxtrain_samples, fxtest_samples, x_train, x_test, rmse_train, rmse_test, accept_ratio)
