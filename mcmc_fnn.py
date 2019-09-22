@@ -11,9 +11,9 @@ import random
 import time
 import math
 
-######################################################
+#-------------------------------------------------------------------------------
 # DEFINE A NEURAL NETWORK CLASS
-######################################################
+#-------------------------------------------------------------------------------
 class Network:
     def __init__(self, Topo, Train, Test):
         self.Top = Topo  # NN topology [input, hidden, output]
@@ -111,6 +111,27 @@ class MCMC:
            newincl[pos]=0
         return newincl
 
+    def getIndecies(self, arr, val):
+        return np.where(arr == val)[0]
+
+    def modifyIncludedDataV2(self, incl):
+        newincl = incl.copy()
+        # DETERMINE WHETHER TO ADD OR REMOVE DATA
+        action = random.uniform(0, 1)
+        if (action< 0.5) :
+           ind = self.getIndecies(incl, 0)
+           newval = 1
+        else: 
+           ind = self.getIndecies(incl, 1)
+           newval = 0
+        if (len(ind) == 0):
+           return newincl
+        pos_ind = random.choice(list(range(0, len(ind))))
+        pos = ind[pos_ind]
+        newincl[pos]=newval
+        return newincl
+
+
     def log_likelihood(self, neuralnet, data, w, tausq):
         y = data[:, self.topology[0]]
         fx = neuralnet.evaluate_proposal(data, w)
@@ -145,8 +166,8 @@ class MCMC:
         # this needs to be factored into the calculate of the likelihood.
 
         # A vector that indicate whether to include a given data point in the training set
-        incl = np.ones(trainsize)
-        # incl =  np.array([random.choice([0,1]) for _ in range(trainsize)])
+        # incl = np.ones(trainsize)
+        incl =  np.array([random.choice([0,1]) for _ in range(trainsize)])
 
         # History of that vector - This will form the posterior over DATA INCLUSION
         pos_incl = np.ones((samples, trainsize))
@@ -269,7 +290,8 @@ class MCMC:
             eta_pro = eta + np.random.normal(0, step_eta, 1)
             tau_pro = math.exp(eta_pro)
 
-            incl_pro = self.modifyIncludedData(incl)
+            incl_pro = self.modifyIncludedDataV2(incl)
+            #incl_pro = self.modifyIncludedData(incl)
             dataThisRound = self.reduceData(self.traindata, incl_pro)
 
             # WE RUN THIS TWICE SO WE HAVE PERFORMANCE OF THE WHOLE TRAINING SET FOR LOGGING
@@ -383,13 +405,16 @@ def main():
         pos_w = pos_w[int(burnin):, ]
         pos_tau = pos_tau[int(burnin):, ]
 
-        fx_mu = fx_test.mean(axis=0)
-        fx_high = np.percentile(fx_test, 95, axis=0)
-        fx_low = np.percentile(fx_test, 5, axis=0)
+        fx_train_final = fx_train[int(burnin):, ]
+        fx_test_final = fx_test[int(burnin):, ]
 
-        fx_mu_tr = fx_train.mean(axis=0)
-        fx_high_tr = np.percentile(fx_train, 95, axis=0)
-        fx_low_tr = np.percentile(fx_train, 5, axis=0)
+        fx_mu = fx_test_final.mean(axis=0)
+        fx_high = np.percentile(fx_test_final, 95, axis=0)
+        fx_low = np.percentile(fx_test_final, 5, axis=0)
+
+        fx_mu_tr = fx_train_final.mean(axis=0)
+        fx_high_tr = np.percentile(fx_train_final, 95, axis=0)
+        fx_low_tr = np.percentile(fx_train_final, 5, axis=0)
 
         rmse_tr = np.mean(rmse_train[int(burnin):])
         rmsetr_std = np.std(rmse_train[int(burnin):])
